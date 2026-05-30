@@ -1,4 +1,6 @@
 import { App, Editor, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { Extension } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 import { trimEbookAttribution } from './src/trimmer';
 
 interface EbookTrimmerSettings {
@@ -8,6 +10,49 @@ interface EbookTrimmerSettings {
 const DEFAULT_SETTINGS: EbookTrimmerSettings = {
   autoPasteMode: true,
 };
+
+function buildTrimExtension(plugin: EbookTextShareTrimmerPlugin): Extension {
+  return EditorView.updateListener.of((update) => {
+    if (!plugin.settings.autoPasteMode) return;
+    if (!update.docChanged) return;
+
+    for (const tr of update.transactions) {
+      if (tr.isUserEvent('ebook-trim')) continue;
+
+      // 가장 큰 단일 삽입을 찾는다 (붙여넣기는 보통 한 번에 큰 텍스트를 삽입)
+      let maxLen = 0;
+      let insertedText = '';
+      let insertFrom = 0;
+      let insertTo = 0;
+
+      tr.changes.iterChanges((_fromA, _toA, fromB, toB, inserted) => {
+        const text = inserted.toString();
+        if (text.length > maxLen) {
+          maxLen = text.length;
+          insertedText = text;
+          insertFrom = fromB;
+          insertTo = toB;
+        }
+      });
+
+      // 짧은 삽입(타이핑, 자동완성 등)은 건너뜀
+      if (maxLen < 30) continue;
+
+      const trimmed = trimEbookAttribution(insertedText);
+      if (trimmed === insertedText) continue;
+      // 트리밍 결과가 비어있으면 건너뜀 (예: URL만 단독 붙여넣기)
+      if (!trimmed.trim()) continue;
+
+      update.view.dispatch({
+        changes: { from: insertFrom, to: insertTo, insert: trimmed },
+        userEvent: 'ebook-trim',
+      });
+
+      new Notice('eBook 출처 문구가 자동으로 제거되었습니다.');
+      break;
+    }
+  });
+}
 
 export default class EbookTextShareTrimmerPlugin extends Plugin {
   settings: EbookTrimmerSettings;
@@ -49,34 +94,7 @@ export default class EbookTextShareTrimmerPlugin extends Plugin {
       },
     });
 
-    this.registerEvent(
-      this.app.workspace.on('editor-paste', (evt: ClipboardEvent, editor: Editor) => {
-        if (!this.settings.autoPasteMode) return;
-
-        const syncText = evt.clipboardData?.getData('text/plain');
-        if (syncText) {
-          const trimmed = trimEbookAttribution(syncText);
-          if (trimmed !== syncText) {
-            evt.preventDefault();
-            editor.replaceSelection(trimmed);
-            new Notice('eBook 출처 문구가 자동으로 제거되었습니다.');
-          }
-          return;
-        }
-
-        // Fallback: 모바일 첫 붙여넣기 시 clipboardData가 비어있는 경우
-        if (!navigator.clipboard?.readText) return;
-        evt.preventDefault();
-        navigator.clipboard.readText().then(clipText => {
-          if (!clipText) return;
-          const trimmed = trimEbookAttribution(clipText);
-          editor.replaceSelection(trimmed);
-          if (trimmed !== clipText) {
-            new Notice('eBook 출처 문구가 자동으로 제거되었습니다.');
-          }
-        }).catch(() => {});
-      })
-    );
+    this.registerEditorExtension(buildTrimExtension(this));
 
     this.addSettingTab(new EbookTrimmerSettingTab(this.app, this));
   }

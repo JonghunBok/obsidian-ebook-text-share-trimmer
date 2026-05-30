@@ -23,6 +23,7 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
+var import_view = require("@codemirror/view");
 
 // src/trimmer.ts
 var ATTRIBUTION_PATTERNS = [
@@ -82,6 +83,38 @@ function trimEbookAttribution(text) {
 var DEFAULT_SETTINGS = {
   autoPasteMode: true
 };
+function buildTrimExtension(plugin) {
+  return import_view.EditorView.updateListener.of((update) => {
+    if (!plugin.settings.autoPasteMode) return;
+    if (!update.docChanged) return;
+    for (const tr of update.transactions) {
+      if (tr.isUserEvent("ebook-trim")) continue;
+      let maxLen = 0;
+      let insertedText = "";
+      let insertFrom = 0;
+      let insertTo = 0;
+      tr.changes.iterChanges((_fromA, _toA, fromB, toB, inserted) => {
+        const text = inserted.toString();
+        if (text.length > maxLen) {
+          maxLen = text.length;
+          insertedText = text;
+          insertFrom = fromB;
+          insertTo = toB;
+        }
+      });
+      if (maxLen < 30) continue;
+      const trimmed = trimEbookAttribution(insertedText);
+      if (trimmed === insertedText) continue;
+      if (!trimmed.trim()) continue;
+      update.view.dispatch({
+        changes: { from: insertFrom, to: insertTo, insert: trimmed },
+        userEvent: "ebook-trim"
+      });
+      new import_obsidian.Notice("eBook \uCD9C\uCC98 \uBB38\uAD6C\uAC00 \uC790\uB3D9\uC73C\uB85C \uC81C\uAC70\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
+      break;
+    }
+  });
+}
 var EbookTextShareTrimmerPlugin = class extends import_obsidian.Plugin {
   async onload() {
     await this.loadSettings();
@@ -117,33 +150,7 @@ var EbookTextShareTrimmerPlugin = class extends import_obsidian.Plugin {
         }
       }
     });
-    this.registerEvent(
-      this.app.workspace.on("editor-paste", (evt, editor) => {
-        var _a, _b;
-        if (!this.settings.autoPasteMode) return;
-        const syncText = (_a = evt.clipboardData) == null ? void 0 : _a.getData("text/plain");
-        if (syncText) {
-          const trimmed = trimEbookAttribution(syncText);
-          if (trimmed !== syncText) {
-            evt.preventDefault();
-            editor.replaceSelection(trimmed);
-            new import_obsidian.Notice("eBook \uCD9C\uCC98 \uBB38\uAD6C\uAC00 \uC790\uB3D9\uC73C\uB85C \uC81C\uAC70\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
-          }
-          return;
-        }
-        if (!((_b = navigator.clipboard) == null ? void 0 : _b.readText)) return;
-        evt.preventDefault();
-        navigator.clipboard.readText().then((clipText) => {
-          if (!clipText) return;
-          const trimmed = trimEbookAttribution(clipText);
-          editor.replaceSelection(trimmed);
-          if (trimmed !== clipText) {
-            new import_obsidian.Notice("eBook \uCD9C\uCC98 \uBB38\uAD6C\uAC00 \uC790\uB3D9\uC73C\uB85C \uC81C\uAC70\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
-          }
-        }).catch(() => {
-        });
-      })
-    );
+    this.registerEditorExtension(buildTrimExtension(this));
     this.addSettingTab(new EbookTrimmerSettingTab(this.app, this));
   }
   onunload() {
