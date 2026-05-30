@@ -6,7 +6,7 @@ interface EbookTrimmerSettings {
 }
 
 const DEFAULT_SETTINGS: EbookTrimmerSettings = {
-  autoPasteMode: false,
+  autoPasteMode: true,
 };
 
 export default class EbookTextShareTrimmerPlugin extends Plugin {
@@ -58,6 +58,7 @@ export default class EbookTextShareTrimmerPlugin extends Plugin {
         if (trimmed !== text) {
           evt.preventDefault();
           editor.replaceSelection(trimmed);
+          new Notice('eBook 출처 문구가 자동으로 제거되었습니다.');
         }
       })
     );
@@ -92,7 +93,7 @@ class EbookTrimmerSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('붙여넣기 시 자동 제거')
       .setDesc(
-        '활성화하면 eBook 앱에서 복사한 텍스트를 붙여넣을 때 출처 문구를 자동으로 제거합니다.'
+        'eBook 앱에서 복사한 텍스트를 붙여넣을 때 출처 문구(책 제목, 저자, 링크)를 자동으로 제거합니다. 기본적으로 활성화되어 있습니다.'
       )
       .addToggle(toggle =>
         toggle.setValue(this.plugin.settings.autoPasteMode).onChange(async value => {
