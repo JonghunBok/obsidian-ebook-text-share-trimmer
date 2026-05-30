@@ -52,14 +52,29 @@ export default class EbookTextShareTrimmerPlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on('editor-paste', (evt: ClipboardEvent, editor: Editor) => {
         if (!this.settings.autoPasteMode) return;
-        const text = evt.clipboardData?.getData('text/plain');
-        if (!text) return;
-        const trimmed = trimEbookAttribution(text);
-        if (trimmed !== text) {
-          evt.preventDefault();
-          editor.replaceSelection(trimmed);
-          new Notice('eBook 출처 문구가 자동으로 제거되었습니다.');
+
+        const syncText = evt.clipboardData?.getData('text/plain');
+        if (syncText) {
+          const trimmed = trimEbookAttribution(syncText);
+          if (trimmed !== syncText) {
+            evt.preventDefault();
+            editor.replaceSelection(trimmed);
+            new Notice('eBook 출처 문구가 자동으로 제거되었습니다.');
+          }
+          return;
         }
+
+        // Fallback: 모바일 첫 붙여넣기 시 clipboardData가 비어있는 경우
+        if (!navigator.clipboard?.readText) return;
+        evt.preventDefault();
+        navigator.clipboard.readText().then(clipText => {
+          if (!clipText) return;
+          const trimmed = trimEbookAttribution(clipText);
+          editor.replaceSelection(trimmed);
+          if (trimmed !== clipText) {
+            new Notice('eBook 출처 문구가 자동으로 제거되었습니다.');
+          }
+        }).catch(() => {});
       })
     );
 
