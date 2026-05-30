@@ -4,14 +4,12 @@ on:
   push:
     branches:
       - main
-    paths:
-      - manifest.json
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,18 +18,30 @@ jobs:
         id: version
         run: echo "version=$(node -p \"require('./manifest.json').version\")" >> $GITHUB_OUTPUT
 
+      - name: Check if release already exists
+        id: check
+        run: |
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.version.outputs.version }}")
+          echo "exists=$([ $CODE -eq 200 ] && echo true || echo false)" >> $GITHUB_OUTPUT
+
       - name: Use Node.js
+        if: steps.check.outputs.exists == 'false'
         uses: actions/setup-node@v4
         with:
           node-version: "20.x"
 
       - name: Install dependencies
+        if: steps.check.outputs.exists == 'false'
         run: npm ci
 
       - name: Build plugin
+        if: steps.check.outputs.exists == 'false'
         run: npm run build
 
       - name: Create Release
+        if: steps.check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
