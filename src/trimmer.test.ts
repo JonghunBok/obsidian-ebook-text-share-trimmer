@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { trimEbookAttribution } from './trimmer';
+import { trimEbookAttribution, applyPasteFormat } from './trimmer';
 
 const KYOBO_EXAMPLE = `\
  이런 예술 형태의 변화와 함께 더 중요한 기능과 평가의 변화가 따라왔다. 예술은 점점 더 독립적이면서도 중요한 가치로 인정받게 되었다
@@ -62,5 +62,27 @@ describe('trimEbookAttribution', () => {
 
   it('handles empty string', () => {
     expect(trimEbookAttribution('')).toBe('');
+  });
+});
+
+describe('applyPasteFormat', () => {
+  it('blockquote: prefixes each line with "> "', () => {
+    const result = applyPasteFormat('첫 번째 줄\n두 번째 줄', 'blockquote', '');
+    expect(result).toBe('> 첫 번째 줄\n> 두 번째 줄');
+  });
+
+  it('blockquote: empty lines become ">"', () => {
+    const result = applyPasteFormat('첫 단락\n\n두 번째 단락', 'blockquote', '');
+    expect(result).toBe('> 첫 단락\n>\n> 두 번째 단락');
+  });
+
+  it('custom: replaces {{content}} with text', () => {
+    const result = applyPasteFormat('인용 텍스트', 'custom', '> {{content}}\n— 출처');
+    expect(result).toBe('> 인용 텍스트\n— 출처');
+  });
+
+  it('none: returns text unchanged', () => {
+    const text = '그대로 반환';
+    expect(applyPasteFormat(text, 'none', '')).toBe(text);
   });
 });

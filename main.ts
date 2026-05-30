@@ -1,15 +1,25 @@
 import { App, Editor, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { trimEbookAttribution } from './src/trimmer';
+import { trimEbookAttribution, applyPasteFormat, PasteFormat } from './src/trimmer';
 
 interface EbookTrimmerSettings {
   autoPasteMode: boolean;
+  pasteFormat: PasteFormat;
+  customTemplate: string;
 }
 
 const DEFAULT_SETTINGS: EbookTrimmerSettings = {
   autoPasteMode: true,
+  pasteFormat: 'blockquote',
+  customTemplate: '{{content}}',
 };
+
+function processText(text: string, settings: EbookTrimmerSettings): string | null {
+  const trimmed = trimEbookAttribution(text);
+  if (trimmed === text || !trimmed.trim()) return null;
+  return applyPasteFormat(trimmed, settings.pasteFormat, settings.customTemplate);
+}
 
 function buildTrimExtension(plugin: EbookTextShareTrimmerPlugin): Extension {
   return EditorView.updateListener.of((update) => {
@@ -19,7 +29,6 @@ function buildTrimExtension(plugin: EbookTextShareTrimmerPlugin): Extension {
     for (const tr of update.transactions) {
       if (tr.isUserEvent('ebook-trim')) continue;
 
-      // 가장 큰 단일 삽입을 찾는다 (붙여넣기는 보통 한 번에 큰 텍스트를 삽입)
       let maxLen = 0;
       let insertedText = '';
       let insertFrom = 0;
@@ -35,16 +44,13 @@ function buildTrimExtension(plugin: EbookTextShareTrimmerPlugin): Extension {
         }
       });
 
-      // 짧은 삽입(타이핑, 자동완성 등)은 건너뜀
       if (maxLen < 30) continue;
 
-      const trimmed = trimEbookAttribution(insertedText);
-      if (trimmed === insertedText) continue;
-      // 트리밍 결과가 비어있으면 건너뜀 (예: URL만 단독 붙여넣기)
-      if (!trimmed.trim()) continue;
+      const result = processText(insertedText, plugin.settings);
+      if (!result) continue;
 
       update.view.dispatch({
-        changes: { from: insertFrom, to: insertTo, insert: trimmed },
+        changes: { from: insertFrom, to: insertTo, insert: result },
         userEvent: 'ebook-trim',
       });
 
@@ -69,11 +75,11 @@ export default class EbookTextShareTrimmerPlugin extends Plugin {
           new Notice('선택된 텍스트가 없습니다.');
           return;
         }
-        const trimmed = trimEbookAttribution(selection);
-        if (trimmed === selection) {
+        const result = processText(selection, this.settings);
+        if (!result) {
           new Notice('eBook 출처 문구를 찾을 수 없습니다.');
         } else {
-          editor.replaceSelection(trimmed);
+          editor.replaceSelection(result);
         }
       },
     });
@@ -125,14 +131,43 @@ class EbookTrimmerSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('붙여넣기 시 자동 제거')
-      .setDesc(
-        'eBook 앱에서 복사한 텍스트를 붙여넣을 때 출처 문구(책 제목, 저자, 링크)를 자동으로 제거합니다. 기본적으로 활성화되어 있습니다.'
-      )
+      .setDesc('eBook 앱에서 복사한 텍스트를 붙여넣을 때 출처 문구를 자동으로 제거합니다.')
       .addToggle(toggle =>
         toggle.setValue(this.plugin.settings.autoPasteMode).onChange(async value => {
           this.plugin.settings.autoPasteMode = value;
           await this.plugin.saveSettings();
         })
       );
+
+    new Setting(containerEl)
+      .setName('붙여넣기 형식')
+      .setDesc('출처 제거 후 텍스트에 적용할 서식입니다.')
+      .addDropdown(dropdown =>
+        dropdown
+          .addOption('none', '없음')
+          .addOption('blockquote', '인용구 (> )')
+          .addOption('custom', '직접 설정')
+          .setValue(this.plugin.settings.pasteFormat)
+          .onChange(async value => {
+            this.plugin.settings.pasteFormat = value as PasteFormat;
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+
+    if (this.plugin.settings.pasteFormat === 'custom') {
+      new Setting(containerEl)
+        .setName('커스텀 템플릿')
+        .setDesc('{{content}} 위치에 트리밍된 텍스트가 삽입됩니다. 예: > {{content}}')
+        .addTextArea(text =>
+          text
+            .setPlaceholder('{{content}}')
+            .setValue(this.plugin.settings.customTemplate)
+            .onChange(async value => {
+              this.plugin.settings.customTemplate = value;
+              await this.plugin.saveSettings();
+            })
+        );
+    }
   }
 }

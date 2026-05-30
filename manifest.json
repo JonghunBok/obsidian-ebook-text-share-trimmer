@@ -1,7 +1,7 @@
 {
   "id": "ebook-text-share-trimmer",
   "name": "eBook Text Share Trimmer",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "minAppVersion": "0.15.0",
   "description": "전자책 앱에서 공유한 텍스트의 출처 문구 및 링크를 자동으로 제거합니다. (교보eBook, 예스24 크레마, 리디북스 등)",
   "author": "jonghunbok",

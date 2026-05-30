@@ -78,11 +78,28 @@ function trimEbookAttribution(text) {
   }
   return lines.slice(0, end).join("\n");
 }
+function applyPasteFormat(text, format, customTemplate) {
+  switch (format) {
+    case "blockquote":
+      return text.split("\n").map((line) => line.trim() === "" ? ">" : `> ${line}`).join("\n");
+    case "custom":
+      return customTemplate.replace("{{content}}", text);
+    default:
+      return text;
+  }
+}
 
 // main.ts
 var DEFAULT_SETTINGS = {
-  autoPasteMode: true
+  autoPasteMode: true,
+  pasteFormat: "blockquote",
+  customTemplate: "{{content}}"
 };
+function processText(text, settings) {
+  const trimmed = trimEbookAttribution(text);
+  if (trimmed === text || !trimmed.trim()) return null;
+  return applyPasteFormat(trimmed, settings.pasteFormat, settings.customTemplate);
+}
 function buildTrimExtension(plugin) {
   return import_view.EditorView.updateListener.of((update) => {
     if (!plugin.settings.autoPasteMode) return;
@@ -103,11 +120,10 @@ function buildTrimExtension(plugin) {
         }
       });
       if (maxLen < 30) continue;
-      const trimmed = trimEbookAttribution(insertedText);
-      if (trimmed === insertedText) continue;
-      if (!trimmed.trim()) continue;
+      const result = processText(insertedText, plugin.settings);
+      if (!result) continue;
       update.view.dispatch({
-        changes: { from: insertFrom, to: insertTo, insert: trimmed },
+        changes: { from: insertFrom, to: insertTo, insert: result },
         userEvent: "ebook-trim"
       });
       new import_obsidian.Notice("eBook \uCD9C\uCC98 \uBB38\uAD6C\uAC00 \uC790\uB3D9\uC73C\uB85C \uC81C\uAC70\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
@@ -127,11 +143,11 @@ var EbookTextShareTrimmerPlugin = class extends import_obsidian.Plugin {
           new import_obsidian.Notice("\uC120\uD0DD\uB41C \uD14D\uC2A4\uD2B8\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.");
           return;
         }
-        const trimmed = trimEbookAttribution(selection);
-        if (trimmed === selection) {
+        const result = processText(selection, this.settings);
+        if (!result) {
           new import_obsidian.Notice("eBook \uCD9C\uCC98 \uBB38\uAD6C\uB97C \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.");
         } else {
-          editor.replaceSelection(trimmed);
+          editor.replaceSelection(result);
         }
       }
     });
@@ -171,13 +187,26 @@ var EbookTrimmerSettingTab = class extends import_obsidian.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.createEl("h2", { text: "eBook Text Share Trimmer" });
-    new import_obsidian.Setting(containerEl).setName("\uBD99\uC5EC\uB123\uAE30 \uC2DC \uC790\uB3D9 \uC81C\uAC70").setDesc(
-      "eBook \uC571\uC5D0\uC11C \uBCF5\uC0AC\uD55C \uD14D\uC2A4\uD2B8\uB97C \uBD99\uC5EC\uB123\uC744 \uB54C \uCD9C\uCC98 \uBB38\uAD6C(\uCC45 \uC81C\uBAA9, \uC800\uC790, \uB9C1\uD06C)\uB97C \uC790\uB3D9\uC73C\uB85C \uC81C\uAC70\uD569\uB2C8\uB2E4. \uAE30\uBCF8\uC801\uC73C\uB85C \uD65C\uC131\uD654\uB418\uC5B4 \uC788\uC2B5\uB2C8\uB2E4."
-    ).addToggle(
+    new import_obsidian.Setting(containerEl).setName("\uBD99\uC5EC\uB123\uAE30 \uC2DC \uC790\uB3D9 \uC81C\uAC70").setDesc("eBook \uC571\uC5D0\uC11C \uBCF5\uC0AC\uD55C \uD14D\uC2A4\uD2B8\uB97C \uBD99\uC5EC\uB123\uC744 \uB54C \uCD9C\uCC98 \uBB38\uAD6C\uB97C \uC790\uB3D9\uC73C\uB85C \uC81C\uAC70\uD569\uB2C8\uB2E4.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.autoPasteMode).onChange(async (value) => {
         this.plugin.settings.autoPasteMode = value;
         await this.plugin.saveSettings();
       })
     );
+    new import_obsidian.Setting(containerEl).setName("\uBD99\uC5EC\uB123\uAE30 \uD615\uC2DD").setDesc("\uCD9C\uCC98 \uC81C\uAC70 \uD6C4 \uD14D\uC2A4\uD2B8\uC5D0 \uC801\uC6A9\uD560 \uC11C\uC2DD\uC785\uB2C8\uB2E4.").addDropdown(
+      (dropdown) => dropdown.addOption("none", "\uC5C6\uC74C").addOption("blockquote", "\uC778\uC6A9\uAD6C (> )").addOption("custom", "\uC9C1\uC811 \uC124\uC815").setValue(this.plugin.settings.pasteFormat).onChange(async (value) => {
+        this.plugin.settings.pasteFormat = value;
+        await this.plugin.saveSettings();
+        this.display();
+      })
+    );
+    if (this.plugin.settings.pasteFormat === "custom") {
+      new import_obsidian.Setting(containerEl).setName("\uCEE4\uC2A4\uD140 \uD15C\uD50C\uB9BF").setDesc("{{content}} \uC704\uCE58\uC5D0 \uD2B8\uB9AC\uBC0D\uB41C \uD14D\uC2A4\uD2B8\uAC00 \uC0BD\uC785\uB429\uB2C8\uB2E4. \uC608: > {{content}}").addTextArea(
+        (text) => text.setPlaceholder("{{content}}").setValue(this.plugin.settings.customTemplate).onChange(async (value) => {
+          this.plugin.settings.customTemplate = value;
+          await this.plugin.saveSettings();
+        })
+      );
+    }
   }
 };

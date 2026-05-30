@@ -30,10 +30,8 @@ export function trimEbookAttribution(text: string): string {
     if (ATTRIBUTION_PATTERNS.some(p => p.test(line))) {
       attributionStart = i;
     } else if (line === '') {
-      // blank lines can appear anywhere within the attribution block
       continue;
     } else if (attributionStart !== -1 && BOOK_CITATION_PATTERNS.some(p => p.test(line))) {
-      // book title / author line that precedes known attribution
       attributionStart = i;
     } else {
       break;
@@ -42,11 +40,26 @@ export function trimEbookAttribution(text: string): string {
 
   if (attributionStart === -1) return text;
 
-  // Also strip blank lines between content and attribution block
   let end = attributionStart;
   while (end > 0 && lines[end - 1].trim() === '') {
     end--;
   }
 
   return lines.slice(0, end).join('\n');
+}
+
+export type PasteFormat = 'none' | 'blockquote' | 'custom';
+
+export function applyPasteFormat(text: string, format: PasteFormat, customTemplate: string): string {
+  switch (format) {
+    case 'blockquote':
+      return text
+        .split('\n')
+        .map(line => (line.trim() === '' ? '>' : `> ${line}`))
+        .join('\n');
+    case 'custom':
+      return customTemplate.replace('{{content}}', text);
+    default:
+      return text;
+  }
 }
