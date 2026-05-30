@@ -119,16 +119,29 @@ var EbookTextShareTrimmerPlugin = class extends import_obsidian.Plugin {
     });
     this.registerEvent(
       this.app.workspace.on("editor-paste", (evt, editor) => {
-        var _a;
+        var _a, _b;
         if (!this.settings.autoPasteMode) return;
-        const text = (_a = evt.clipboardData) == null ? void 0 : _a.getData("text/plain");
-        if (!text) return;
-        const trimmed = trimEbookAttribution(text);
-        if (trimmed !== text) {
-          evt.preventDefault();
-          editor.replaceSelection(trimmed);
-          new import_obsidian.Notice("eBook \uCD9C\uCC98 \uBB38\uAD6C\uAC00 \uC790\uB3D9\uC73C\uB85C \uC81C\uAC70\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
+        const syncText = (_a = evt.clipboardData) == null ? void 0 : _a.getData("text/plain");
+        if (syncText) {
+          const trimmed = trimEbookAttribution(syncText);
+          if (trimmed !== syncText) {
+            evt.preventDefault();
+            editor.replaceSelection(trimmed);
+            new import_obsidian.Notice("eBook \uCD9C\uCC98 \uBB38\uAD6C\uAC00 \uC790\uB3D9\uC73C\uB85C \uC81C\uAC70\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
+          }
+          return;
         }
+        if (!((_b = navigator.clipboard) == null ? void 0 : _b.readText)) return;
+        evt.preventDefault();
+        navigator.clipboard.readText().then((clipText) => {
+          if (!clipText) return;
+          const trimmed = trimEbookAttribution(clipText);
+          editor.replaceSelection(trimmed);
+          if (trimmed !== clipText) {
+            new import_obsidian.Notice("eBook \uCD9C\uCC98 \uBB38\uAD6C\uAC00 \uC790\uB3D9\uC73C\uB85C \uC81C\uAC70\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
+          }
+        }).catch(() => {
+        });
       })
     );
     this.addSettingTab(new EbookTrimmerSettingTab(this.app, this));
